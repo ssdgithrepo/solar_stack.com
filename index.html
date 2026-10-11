@@ -897,17 +897,18 @@ async function loadData(){try{const pt=isPt();
  const [r,st]=await Promise.all([pt?{data:[],error:null}:sb.from('ss_records').select('*').eq('user_id',OID()).order('created_at',{ascending:false}),P.parent?null:sb.from('ss_profiles').select('*').eq('parent',P.id),(pt||!P.parent)?loadPR():null]);
  if(r.error){if(isNet(r.error))offBanner(1);else toast(r.error.message);return false}
  D={};(r.data||[]).forEach(x=>(D[x.kind]=D[x.kind]||[]).push({id:x.id,...x.data}));R=D.customer||[];if(st&&!st.error){const a=st.data||[];SF=a.filter(x=>x.ptype!=='partner');PT=a.filter(x=>x.ptype==='partner')}DIRTY=0;LASTLOAD=Date.now();LOADED=1;offBanner(0);cacheSave();return true}catch(e){offBanner(1);return false}}
+async function renderView(key){try{const view=VW[key];if(!view)return;const html=await view();if(v===key&&!busyUI())$('main').innerHTML=html}catch(e){console.error('View render failed:',key,e);$('main').innerHTML='<div class="ban">This section could not be displayed. Please refresh and try again.</div>'}}
 async function go(x){if(isPt()&&!/^pt_/.test(x))x='pt_dash';v=x;if(innerWidth<900)document.body.classList.remove('nav-open');const N=isPt()?[['pt_dash','Home'],['pt_lead','Leads'],['pt_proj','Projects'],['pt_mat','Materials'],['pt_txn','Transactions']]:P.parent?[['dash','Home'],['lead','Leads'],['quote','Proposals'],['cust','Projects'],['docs','Documents'],['stock','Procurement'],['svc','Service']]:own()?[['odash','Home'],['users','Users'],['payments','Payments'],['support_admin','Support Tickets'],['plans','Plans'],['profile','Profile']]:[['dash','Home'],['lead','Leads'],['quote','Proposals'],['cust','Projects'],['docs','Documents'],['stock','Procurement'],['svc','Service'],['tpl','Templates'],['books','Books'],['team','Team'],['partners','Partners'],['plan','Plan'],['support','Website Support'],['profile','Profile']];
 $('nav').innerHTML=N.map(n=>`<a class="${n[0]==(x=='pd'?'partners':x)?'on':''}" onclick="go('${n[0]}')">${n[1]}</a>`).join('');
 if(own()){const [r,u]=await Promise.all([sb.from('ss_plans').select('*').order('price'),sb.from('ss_profiles').select('*').neq('role','owner').order('created_at',{ascending:false})]);if(!r.error)plans=r.data||[];if(!u.error)US=u.data||[];if(own()){const pr=await sb.from('ss_payment_submissions').select('*').order('created_at',{ascending:false});if(!pr.error)PAYMENTS=pr.data||[];const tr=await sb.from('ss_platform_tickets').select('*').order('created_at',{ascending:false});if(!tr.error)PLATFORM_TICKETS=tr.data||[];const ob=await sb.from('ss_profiles').select('business').eq('id',P.id).maybeSingle();if(!ob.error)OWNERBIZ=ob.data?.business||{};if(!OWNERBIZ.payment_qr)OWNERBIZ.payment_qr=DEFAULT_PAYMENT_QR}else{const payinfo=await sb.rpc('ss_public_payment_info');if(!payinfo.error)OWNERBIZ=payinfo.data||{};if(!OWNERBIZ.payment_qr)OWNERBIZ.payment_qr=DEFAULT_PAYMENT_QR}if(r.error&&isNet(r.error))offBanner(1);else{offBanner(0);cacheSave()}}
 else{const forced=DIRTY||FRESH,stale=forced||Date.now()-LASTLOAD>30000;
  if(stale){FRESH=0;const job=loadData();
-  if(CACHEONLY||(!forced&&LOADED)){CACHEONLY=0;try{$('main').innerHTML=VW[x]()}catch(e){console.warn(e)}
-   job.then(ok=>{if(ok&&v==x&&!busyUI())try{$('main').innerHTML=VW[x]()}catch(e){}});return}
+  if(CACHEONLY||(!forced&&LOADED)){CACHEONLY=0;renderView(x);
+   job.then(ok=>{if(ok&&v==x&&!busyUI())renderView(x)});return}
   if(!LOADED)$('main').innerHTML='<div class="card" style="text-align:center;padding:40px"><div class="ld" style="max-width:220px;margin:0 auto 14px"><i></i></div><div class="mu">Loading your data…</div></div>';
   const ok=await job;
   if(!ok&&!LOADED){$('main').innerHTML='<div class="card" style="text-align:center;padding:36px"><div style="font-size:36px">📶</div><b>Couldn\'t load your data</b><p class="mu">The connection is slow or offline.</p><button class="btn a" onclick="go(v)">Try again</button></div>';return}}}
-$('main').innerHTML=VW[x]()}
+await renderView(x)}
 async function put(t,o,id,k='customer'){const d={...o};delete d.id;const r=id?await sb.from(t).update(t=='ss_records'?{data:d}:d).eq('id',id):await sb.from(t).insert(t=='ss_records'?{kind:k,data:d,user_id:OID()}:d);if(r.error){toast(isNet(r.error)?'No internet connection — not saved. Please try again when online.':r.error.message);return 0}return 1}
 const lock=()=>okPlan()?'':`<div class="ban">⚠ You have no active plan. <a href="#" onclick="go('plan');return false">Choose a plan</a> — SRD Sons Technologies will activate it after approval.</div>`;
 
@@ -1839,4 +1840,33 @@ const ssOriginalPq=pq;pq=function(id){const q=L('quote').find(x=>x.id===id);if(!
  document.addEventListener('DOMContentLoaded',refresh);window.addEventListener('load',()=>{refresh();fitLogos()});setInterval(()=>{if(!document.hidden){refresh();fitLogos()}},3000);
 })();
 </script>
-</body></html>
+<script>
+/* Professional, per-business quotation polish: uses the primary accent sampled from the uploaded business logo. */
+(function(){
+ const css=document.createElement('style');
+ css.textContent=`
+ #pr .ss-quote-print{--quote-accent:var(--pr,#1769d2);--quote-dark:var(--nav,#12345b);font-family:Arial,Helvetica,sans-serif!important;color:#18283d!important;line-height:1.45!important;padding:18px!important;border-top:7px solid var(--quote-accent)!important;box-shadow:0 8px 28px rgba(16,35,60,.10)!important}
+ #pr .qhead{padding:10px 8px 18px!important;border-bottom:2px solid var(--brand-border,color-mix(in srgb,var(--quote-accent) 28%,white))!important}
+ #pr .qmeta h1{color:var(--quote-dark)!important;font-size:28px!important;letter-spacing:.8px!important}
+ #pr .qcompany h2{color:var(--quote-dark)!important;font-size:22px!important;font-weight:800!important}
+ #pr .qcompany p{font-size:10.5px!important;color:#506078!important}
+ #pr .qsection{border:1px solid var(--brand-border,color-mix(in srgb,var(--quote-accent) 25%,white))!important;border-radius:7px!important;overflow:hidden!important;box-shadow:0 2px 6px rgba(15,35,60,.035)!important}
+ #pr .qsection h3{background:var(--quote-accent)!important;color:#fff!important;border:0!important;padding:9px 12px!important;font-size:11px!important;letter-spacing:.65px!important;text-transform:uppercase!important}
+ #pr .qtable{border-collapse:separate!important;border-spacing:0!important;border:1px solid #dce4ee!important;border-radius:7px!important;overflow:hidden!important}
+ #pr .qtable th{background:var(--quote-dark)!important;color:#fff!important;padding:10px 8px!important;font-size:10px!important;letter-spacing:.3px!important}
+ #pr .qtable td{border-bottom:1px solid #e7edf4!important;padding:9px 8px!important}
+ #pr .qtable tbody tr:nth-child(even){background:var(--brand-soft,color-mix(in srgb,var(--quote-accent) 6%,white))!important}
+ #pr .qtable .grand{background:var(--quote-accent)!important;color:#fff!important;border:0!important;font-size:17px!important}
+ #pr .qmeta p{border:1px solid #dce4ee!important;border-radius:4px!important;overflow:hidden!important}
+ #pr .qmeta p b{background:#f4f7fb!important;color:#4b5c72!important}
+ #pr .qmeta p span{background:var(--brand-soft,color-mix(in srgb,var(--quote-accent) 7%,white))!important;color:var(--quote-dark)!important;font-weight:700!important}
+ #pr .qstats div{background:var(--brand-soft,color-mix(in srgb,var(--quote-accent) 7%,white))!important;border:1px solid var(--brand-border,color-mix(in srgb,var(--quote-accent) 24%,white))!important;border-radius:8px!important}
+ #pr .qstats b{color:var(--quote-dark)!important}
+ #pr .qmanufacturer .branditem{border:1px solid #dce4ee!important;border-radius:7px!important;box-shadow:0 2px 5px rgba(15,35,60,.04)!important}
+ #pr .bostable th{background:var(--brand-soft,color-mix(in srgb,var(--quote-accent) 10%,white))!important;color:var(--quote-dark)!important;border-color:#dce4ee!important}
+ #pr .bostable td{border-color:#e1e8f0!important}
+ #pr .qsign{border-top:1px dashed #b8c5d6!important;margin-top:20px!important}
+ @media print{#pr .ss-quote-print{box-shadow:none!important;border-top-width:5px!important}#pr .qsection h3,#pr .qtable th,#pr .qtable .grand{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}`;
+ document.head.appendChild(css);
+})();
+</script></body></html>
